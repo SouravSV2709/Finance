@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Expense Tracker with Firebase</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@3.9.0/dist/full.css" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+
+  <!-- Logo -->
+  <div class="flex justify-center mb-6">
+    <img src="Auctionarenalogo.png" alt="Auction Arena Logo" class="w-64 h-auto" />
+  </div>
+
+  <!-- Header and Create Button -->
+  <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-4">
+    <h1 class="text-2xl font-bold">Expense Tracker</h1>
+    <button class="btn btn-primary" onclick="openModal()">Create New</button>
+  </div>
+
+  <!-- Summary & Filter -->
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+    <div>
+      <p class="text-lg font-semibold">Summary:</p>
+      <p>Total Debit: <span id="totalDebit" class="text-red-600 font-bold">₹0</span></p>
+      <p>Total Credit: <span id="totalCredit" class="text-green-600 font-bold">₹0</span></p>
+    </div>
+    <div>
+      <label class="label">
+        <span class="label-text font-medium">Filter by Type:</span>
+      </label>
+      <select id="filterType" class="select select-bordered w-full" onchange="renderTable()">
+        <option value="All">All</option>
+        <option value="Debit">Debit</option>
+        <option value="Credit">Credit</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="overflow-x-auto mb-10">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>Entry ID</th>
+          <th>Entry Details</th>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Comments</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="expenseTable"></tbody>
+    </table>
+  </div>
+
+  <!-- Modal -->
+  <dialog id="entryModal" class="modal">
+    <form method="dialog" class="modal-box">
+      <h3 class="font-bold text-lg mb-4" id="modalTitle">Add New Entry</h3>
+
+      <label class="form-control w-full mb-2">
+        <span class="label-text">Entry Details</span>
+        <input type="text" id="details" class="input input-bordered w-full" required/>
+      </label>
+
+      <label class="form-control w-full mb-2">
+        <span class="label-text">Type</span>
+        <select id="type" class="select select-bordered w-full">
+          <option value="Debit">Debit</option>
+          <option value="Credit">Credit</option>
+        </select>
+      </label>
+
+      <label class="form-control w-full mb-2">
+        <span class="label-text">Amount</span>
+        <input type="number" id="amount" class="input input-bordered w-full" required/>
+      </label>
+
+      <label class="form-control w-full mb-4">
+        <span class="label-text">Comments</span>
+        <input type="text" id="comments" class="input input-bordered w-full"/>
+      </label>
+
+      <div class="modal-action">
+        <button class="btn btn-primary" onclick="saveEntry(event)">Save</button>
+        <button class="btn" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Firebase & Script -->
+  <script type="module">
+    // 1. Firebase SDKs
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import {
+      getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // 2. Replace with your Firebase config
+    const firebaseConfig = {
+    apiKey: "AIzaSyAN5lC-rSRGr1-cBaqtIoDie7x93JlQRxY",
+    authDomain: "auctionarenafinance.firebaseapp.com",
+    projectId: "auctionarenafinance",
+    storageBucket: "auctionarenafinance.firebasestorage.app",
+    messagingSenderId: "623138661897",
+    appId: "1:623138661897:web:699b8b9dc6ecda51d0fad8"
+  };
+
+    // 3. Init Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const entriesCol = collection(db, "expenses");
+
+    let allEntries = [];
+    let editingId = null;
+
+    async function fetchEntries() {
+      const snapshot = await getDocs(entriesCol);
+      allEntries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderTable();
+    }
+
+    function renderTable() {
+      const table = document.getElementById("expenseTable");
+      const filter = document.getElementById("filterType").value;
+      let filtered = allEntries;
+
+      if (filter !== "All") {
+        filtered = allEntries.filter(e => e.type === filter);
+      }
+
+      table.innerHTML = "";
+      let totalDebit = 0, totalCredit = 0;
+
+      filtered.forEach((entry, index) => {
+        if (entry.type === "Debit") totalDebit += parseFloat(entry.amount);
+        else totalCredit += parseFloat(entry.amount);
+
+        table.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${entry.details}</td>
+            <td class="${entry.type === 'Debit' ? 'text-red-600' : 'text-green-600'}">${entry.type}</td>
+            <td>₹${entry.amount}</td>
+            <td>${entry.comments}</td>
+            <td>
+              <button class="btn btn-xs btn-info mr-1" onclick="editEntry('${entry.id}')">Edit</button>
+              <button class="btn btn-xs btn-error" onclick="deleteEntry('${entry.id}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      document.getElementById("totalDebit").textContent = `₹${totalDebit}`;
+      document.getElementById("totalCredit").textContent = `₹${totalCredit}`;
+    }
+
+    window.editEntry = function(id) {
+      const entry = allEntries.find(e => e.id === id);
+      if (!entry) return;
+
+      document.getElementById("modalTitle").innerText = "Edit Entry";
+      document.getElementById("details").value = entry.details;
+      document.getElementById("type").value = entry.type;
+      document.getElementById("amount").value = entry.amount;
+      document.getElementById("comments").value = entry.comments;
+      editingId = id;
+      openModal(true);
+    }
+
+    window.deleteEntry = async function(id) {
+      if (!confirm("Are you sure you want to delete this entry?")) return;
+      await deleteDoc(doc(db, "expenses", id));
+      await fetchEntries();
+    }
+
+    window.saveEntry = async function(event) {
+      event.preventDefault();
+      const details = document.getElementById("details").value;
+      const type = document.getElementById("type").value;
+      const amount = document.getElementById("amount").value;
+      const comments = document.getElementById("comments").value;
+
+      if (!details || !amount) return;
+
+      const data = { details, type, amount, comments };
+
+      if (editingId) {
+        const ref = doc(db, "expenses", editingId);
+        await updateDoc(ref, data);
+      } else {
+        await addDoc(entriesCol, data);
+      }
+
+      closeModal();
+      await fetchEntries();
+    }
+
+    window.openModal = function() {
+      document.getElementById("entryModal").showModal();
+      document.getElementById("modalTitle").innerText = "Add New Entry";
+      clearForm();
+    }
+
+    window.closeModal = function() {
+      document.getElementById("entryModal").close();
+      editingId = null;
+      clearForm();
+    }
+
+    function clearForm() {
+      document.getElementById("details").value = "";
+      document.getElementById("type").value = "Debit";
+      document.getElementById("amount").value = "";
+      document.getElementById("comments").value = "";
+    }
+
+    fetchEntries(); // Load entries on start
+  </script>
+</body>
+</html>

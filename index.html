@@ -176,6 +176,8 @@
 
     }
 
+    window.renderTable = renderTable;
+
     window.editEntry = function (id) {
       const entry = allEntries.find(e => e.id === id);
       if (!entry) return;
